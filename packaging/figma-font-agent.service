@@ -5,17 +5,23 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/figma-font-agent
+ExecStart=/usr/bin/figma-font-agent
 Restart=on-failure
 RestartSec=2
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 
-# Read-only view of the system and the home directory; the agent only needs to
-# read font files and fontconfig's cache.
+# The agent only reads fonts and fontconfig's cache.
 NoNewPrivileges=yes
 PrivateTmp=yes
+PrivateDevices=yes
 ProtectSystem=full
 ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
 ReadWritePaths=-%h/.cache/fontconfig
 
 [Install]

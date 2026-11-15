@@ -1,4 +1,4 @@
-# Maintainer: Homin Luo <hominluo@users.noreply.github.com>
+# Maintainer: Homin Luo <homin.ro@gmail.com>
 pkgname=figma-font-agent
 pkgver=0.1.0
 pkgrel=1
@@ -8,7 +8,7 @@ url='https://github.com/hominluo/figma-font-installer-for-linux'
 license=('MIT')
 depends=('gcc-libs' 'fontconfig')
 makedepends=('cargo' 'rust')
-options=('!lto') # release profile already enables LTO
+options=('!lto') # the release profile already enables LTO
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
@@ -24,11 +24,18 @@ check() {
 
 package() {
     cd "$pkgname-$pkgver"
-    install -Dm755 "target/release/figma-font-agent" "$pkgdir/usr/bin/figma-font-agent"
+
+    install -Dm755 target/release/figma-font-agent \
+        "$pkgdir/usr/bin/figma-font-agent"
+
     install -Dm644 packaging/figma-font-agent.service \
         "$pkgdir/usr/lib/systemd/user/figma-font-agent.service"
     install -Dm644 packaging/figma-font-agent.socket \
         "$pkgdir/usr/lib/systemd/user/figma-font-agent.socket"
+
+    install -Dm644 docs/figma-font-agent.1 \
+        "$pkgdir/usr/share/man/man1/figma-font-agent.1"
+
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
     install -Dm644 docs/protocol.md "$pkgdir/usr/share/doc/$pkgname/protocol.md"
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"

@@ -1,11 +1,7 @@
 //! HTTP surface: the `/figma/*` API plus the CORS/PNA gate browsers need to
 //! reach a loopback service from `https://www.figma.com`.
 
-use std::{
-    path::Path,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{path::Path, sync::Arc, time::Instant};
 
 use axum::{
     body::Body,
@@ -285,9 +281,6 @@ pub fn spawn_rescan_timer(state: AppState) {
     }
 
     tokio::spawn(async move {
-        // A short delay keeps startup cheap when a login-time rescan is already
-        // scheduled by the session.
-        tokio::time::sleep(Duration::from_secs(5)).await;
         loop {
             tokio::time::sleep(interval).await;
             rescan(&state).await;

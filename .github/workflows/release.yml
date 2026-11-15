@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: static binary (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Assemble archive
+        run: |
+          set -euo pipefail
+          staging="dist/figma-font-agent"
+          mkdir -p "$staging"
+          cp "target/${{ matrix.target }}/release/figma-font-agent" "$staging/"
+          cp docs/figma-font-agent.1 "$staging/"
+          cp packaging/figma-font-agent.service "$staging/"
+          cp packaging/figma-font-agent.socket "$staging/"
+          cp README.md LICENSE "$staging/"
+          tar -C dist -czf "dist/figma-font-agent-${{ matrix.target }}.tar.gz" figma-font-agent
+          file "dist/figma-font-agent-${{ matrix.target }}.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  deb:
+    name: Debian package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build
+        run: |
+          cargo build --release --locked
+          cargo deb --no-build --output dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [binaries, deb]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.tar.gz *.deb | tee SHA256SUMS
+          ls -lh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

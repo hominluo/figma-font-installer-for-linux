@@ -23,7 +23,9 @@ pub fn render_svg(
     axes: &[Axis],
     coords: &[f32],
 ) -> Option<String> {
-    let text = text.trim();
+    // Family names are short; capping keeps a crafted request from turning
+    // into a very large SVG.
+    let text: String = text.trim().chars().take(128).collect();
     if text.is_empty() {
         return None;
     }

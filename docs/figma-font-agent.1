@@ -1,0 +1,112 @@
+.TH FIGMA-FONT-AGENT 1 "2026-11-15" "figma-font-agent 0.1.0" "User Commands"
+.SH NAME
+figma-font-agent \- serve Linux system fonts to Figma in the browser
+.SH SYNOPSIS
+.B figma-font-agent
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B figma-font-agent
+is a small loopback HTTP service that implements the local font protocol used
+by Figma for the web. It indexes the fonts known to fontconfig (and the fonts
+in the user's font directories), then answers the requests Figma sends to
+\fBhttp://127.0.0.1:44950/figma/\fR.
+.PP
+The service listens on loopback only. It never writes to the font
+directories, contacts the network, or reports telemetry.
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-config " " \fIPATH\fR
+Read configuration from \fIPATH\fR instead of
+\fI$XDG_CONFIG_HOME/figma-font-agent/config.json\fR.
+.TP
+.B \-\-init\-config
+Write an example configuration file to the default location and exit. An
+existing file is never overwritten.
+.TP
+.BR \-p ", " \-\-port " " \fIPORT\fR
+Listen on \fIPORT\fR. May be repeated to listen on several ports. The default
+is 44950 with 44960 as a fallback.
+.TP
+.B \-\-no\-preview
+Disable the font preview endpoint.
+.TP
+.B \-\-print\-index
+Print the JSON payload that \fB/figma/font-files\fR would return, then exit.
+Useful for debugging what Figma will see.
+.TP
+.BR \-v ", " \-\-verbose
+Enable debug logging.
+.TP
+.BR \-h ", " \-\-help
+Print usage information.
+.TP
+.BR \-V ", " \-\-version
+Print the program version.
+.SH CONFIGURATION
+The configuration file is a JSON object. Every key is optional.
+.TP
+.B package
+String reported to Figma by the version endpoint (default "126.11.9").
+.TP
+.B version
+Numeric protocol version reported to Figma (default 24).
+.TP
+.B ports
+Array of loopback ports to bind (default [44950, 44960]).
+.TP
+.B font_directories
+Array of extra directories to scan for fonts.
+.TP
+.B rescan_interval_secs
+How often to look for new or changed fonts, in seconds. 0 disables rescans
+(default 300).
+.TP
+.B enable_preview
+Boolean; set to false to disable the font preview endpoint (default true).
+.SH ENVIRONMENT
+.TP
+.B LISTEN_FDS ", " LISTEN_PID
+When started by systemd socket activation, the agent serves the passed
+listening sockets instead of binding ports itself. Both variables are consumed
+and cleared at startup.
+.TP
+.B XDG_CONFIG_HOME
+Used to locate the configuration file.
+.SH FILES
+.TP
+.I ~/.config/figma-font-agent/config.json
+User configuration.
+.TP
+.I ~/.local/share/fonts ", " ~/.fonts
+User font directories that are always scanned in addition to fontconfig's
+list.
+.SH EXAMPLES
+Run in the foreground with request logging:
+.PP
+.nf
+    figma-font-agent -v
+.fi
+.PP
+Force a rescan after installing a font:
+.PP
+.nf
+    curl -X POST http://127.0.0.1:44950/figma/clear-data
+.fi
+.PP
+Inspect the font list Figma will receive:
+.PP
+.nf
+    figma-font-agent --print-index | jq '.fontFiles | length'
+.fi
+.SH SECURITY
+The service binds to 127.0.0.1 only, restricts CORS to
+\fIhttps://www.figma.com\fR, validates the \fBHost\fR header to defeat
+DNS rebinding, and serves only paths that are present in its own font index.
+.SH SEE ALSO
+Full protocol and reverse-engineering notes:
+.UR https://github.com/hominluo/figma-font-installer-for-linux
+.UE
+.SH BUGS
+Report issues at
+.UR https://github.com/hominluo/figma-font-installer-for-linux/issues
+.UE

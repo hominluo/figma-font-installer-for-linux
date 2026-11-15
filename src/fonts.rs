@@ -7,7 +7,7 @@
 //! parsed faces.
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -179,7 +179,7 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
         }
     }
 
-    info!(
+    let summary = format!(
         "font index: {} faces in {} files ({} parsed, {} reused, {} unusable) in {} ms",
         face_count,
         files.len(),
@@ -188,6 +188,13 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
         failed,
         started.elapsed().map(|d| d.as_millis()).unwrap_or(0)
     );
+
+    // A quiet periodic rescan should not fill the journal every five minutes.
+    if previous.is_none() || parsed > 0 {
+        info!("{summary}");
+    } else {
+        debug!("{summary}");
+    }
 
     Ok(FontIndex { files, face_count })
 }
@@ -535,29 +542,4 @@ fn be_u32(data: &[u8], offset: usize) -> Option<u32> {
 
 fn fixed_to_f32(value: u32) -> f32 {
     (value as i32) as f32 / 65536.0
-}
-
-/// Lowercases a font family name the way fontconfig does, used only for
-/// debugging output.
-#[allow(dead_code)]
-pub fn family_key(family: &str) -> String {
-    family.to_lowercase().replace(' ', "")
-}
-
-/// Convenience for `--print-index`: file path -> families.
-#[allow(dead_code)]
-pub fn summary(index: &FontIndex) -> HashMap<String, Vec<String>> {
-    index
-        .files
-        .iter()
-        .map(|(path, file)| {
-            (
-                path.clone(),
-                file.faces
-                    .iter()
-                    .map(|face| format!("{} {}", face.family, face.style))
-                    .collect(),
-            )
-        })
-        .collect()
 }

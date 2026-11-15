@@ -77,17 +77,15 @@ impl Args {
                     let port = arguments
                         .next()
                         .context("--port requires a number argument")?;
-                    args.ports.get_or_insert_with(Vec::new).push(
-                        port.parse()
-                            .with_context(|| format!("`{port}` is not a valid port number"))?,
-                    );
+                    args.ports
+                        .get_or_insert_with(Vec::new)
+                        .push(parse_port(&port)?);
                 }
                 other if other.starts_with("--port=") => {
                     let port = &other["--port=".len()..];
-                    args.ports.get_or_insert_with(Vec::new).push(
-                        port.parse()
-                            .with_context(|| format!("`{port}` is not a valid port number"))?,
-                    );
+                    args.ports
+                        .get_or_insert_with(Vec::new)
+                        .push(parse_port(port)?);
                 }
                 other if other.starts_with("--config=") => {
                     args.config = Some(PathBuf::from(&other["--config=".len()..]));
@@ -190,6 +188,18 @@ async fn run() -> Result<()> {
     server::serve(state, listeners).await
 }
 
+fn parse_port(value: &str) -> Result<u16> {
+    let port: u16 = value
+        .parse()
+        .with_context(|| format!("`{value}` is not a valid port number"))?;
+
+    if port == 0 {
+        bail!("port 0 is not a usable listening port");
+    }
+
+    Ok(port)
+}
+
 /// systemd socket activation (`LISTEN_FDS`/`LISTEN_PID`). Using it means the
 /// agent can start on the first request instead of burning a process at login.
 fn socket_activated() -> Vec<tokio::net::TcpListener> {
@@ -210,6 +220,10 @@ fn socket_activated() -> Vec<tokio::net::TcpListener> {
     if count <= 0 || !pid_matches {
         return Vec::new();
     }
+
+    // Do not leak the activation environment into `fc-list` and friends.
+    std::env::remove_var("LISTEN_FDS");
+    std::env::remove_var("LISTEN_PID");
 
     let mut listeners = Vec::new();
 

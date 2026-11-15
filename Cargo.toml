@@ -3,9 +3,12 @@ name = "figma-font-agent"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-description = "Serve Linux system fonts to Figma in the browser (open reimplementation of Figma's local font agent protocol)"
+description = "Serve Linux system fonts to Figma in the browser"
 license = "MIT"
+readme = "README.md"
 repository = "https://github.com/hominluo/figma-font-installer-for-linux"
+homepage = "https://github.com/hominluo/figma-font-installer-for-linux"
+documentation = "https://github.com/hominluo/figma-font-installer-for-linux/blob/main/docs/protocol.md"
 keywords = ["figma", "fonts", "linux", "fontconfig"]
 categories = ["command-line-utilities"]
 
@@ -25,3 +28,23 @@ ttf-parser = "0.25"
 lto = true
 codegen-units = 1
 strip = true
+
+[package.metadata.deb]
+maintainer = "Homin Luo <homin.ro@gmail.com>"
+copyright = "2026, Homin Luo"
+license-file = ["LICENSE"]
+section = "utils"
+priority = "optional"
+depends = "$auto"
+extended-description = """An open reimplementation of the local font protocol used by the Figma \
+Agent, which Figma ships only for macOS and Windows. This service lets the \
+browser build of Figma list and render the fonts installed on a Linux machine. Fonts are discovered through fontconfig, font \
+previews are rendered as SVG, and the service is restricted to 127.0.0.1."""
+assets = [
+    ["target/release/figma-font-agent", "usr/bin/", "755"],
+    ["packaging/figma-font-agent.service", "usr/lib/systemd/user/", "644"],
+    ["packaging/figma-font-agent.socket", "usr/lib/systemd/user/", "644"],
+    ["docs/figma-font-agent.1", "usr/share/man/man1/", "644"],
+    ["README.md", "usr/share/doc/figma-font-agent/README.md", "644"],
+    ["LICENSE", "usr/share/doc/figma-font-agent/copyright", "644"],
+]

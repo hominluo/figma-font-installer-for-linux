@@ -1,5 +1,9 @@
 # figma-font-installer-for-linux
 
+[![CI](https://github.com/hominluo/figma-font-installer-for-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/hominluo/figma-font-installer-for-linux/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/hominluo/figma-font-installer-for-linux?display_name=tag)](https://github.com/hominluo/figma-font-installer-for-linux/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Use the fonts installed on your Linux machine in **Figma for the web**.
 
 Figma's local-font support normally comes from the "Figma Agent" helper that
@@ -11,45 +15,82 @@ browser build of Figma can list and render your system fonts on Linux.
 Figma (browser)  ──►  http://127.0.0.1:44950/figma/*  ──►  figma-font-agent  ──►  fontconfig
 ```
 
-- A single Rust binary, no HarfBuzz, no telemetry, no auto-updater.
-- Reads fonts from fontconfig (`fc-list`) and serves them from `127.0.0.1` only.
-- Handles TrueType/OpenType collections and variable fonts (named instances are
-  exposed as individual styles).
-- Font previews are generated as SVG from the glyph outlines.
+- One small binary, no HarfBuzz, no telemetry, no auto-updater.
+- Static builds for x86_64 and aarch64 — works on any distribution.
+- TrueType/OpenType collections and variable fonts (named instances appear as
+  individual styles).
+- Font previews generated as SVG from the glyph outlines.
+- Listens on loopback only, validates the `Host` header, and serves only files
+  from its own font index.
 
 ## Requirements
 
-- Linux with fontconfig (`fc-list`) — installed by default on virtually every
-  desktop distribution.
-- To build: Rust 1.75+ and a C toolchain.
+- Linux with fontconfig (`fc-list`). Every desktop distribution ships it.
 - A Chromium-based browser recent enough to support Local Network Access, or
-  Firefox. Chromium is what Figma tests against; other engines are hit and miss
-  with loopback permission prompts.
+  Firefox. Chromium is what Figma tests against.
+- systemd (optional, for running the agent as a user service).
 
-## Quick start
+You do **not** need Rust unless you build from source.
+
+## Install
+
+### Any distribution (prebuilt binary)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hominluo/figma-font-installer-for-linux/main/install.sh | bash
+```
+
+This downloads the latest static release for your architecture, verifies its
+SHA-256 checksum, installs it to `~/.local/bin`, installs a systemd **user**
+unit and starts the agent. Nothing needs root.
+
+Useful flags (pass them with `bash -s -- <flag>` when piping):
+
+```bash
+# start on the first Figma request instead of at login
+curl -fsSL …/install.sh | bash -s -- --socket
+
+# install to /usr/local from a checkout instead (needs write access)
+./install.sh --prefix /usr/local
+
+# remove the agent again, keeping the config file
+./install.sh --uninstall
+```
+
+### Arch Linux
 
 ```bash
 git clone https://github.com/hominluo/figma-font-installer-for-linux
 cd figma-font-installer-for-linux
-./packaging/install.sh
+cd packaging && makepkg -si
+systemctl --user enable --now figma-font-agent.service
 ```
 
-`install.sh` builds the release binary, installs it to `~/.local/bin`, installs
-a systemd **user** unit and starts it. Then:
+The package installs the binary to `/usr/bin`, the user units to
+`/usr/lib/systemd/user` and a man page. The PKGBUILD is not in the AUR yet.
 
-1. Open or reload <https://www.figma.com> (or the Figma desktop web app).
-2. Open any file and click the font family picker, then choose
-   **Fonts on this device** / **Local fonts**.
-3. When the browser asks for permission to *"Access other apps and services on
-   this device"*, allow it. Figma stores the grant per origin, so this only
-   happens once.
-4. In Figma, go to the main menu → **Preferences** → **Permissions and
-   helpers** → **Apps on device** and click **Connect** if the helper is not
-   detected automatically.
+### Debian / Ubuntu
 
-Your installed fonts should now appear in the font picker, with previews.
+Download the `.deb` from the [latest release](https://github.com/hominluo/figma-font-installer-for-linux/releases/latest)
+and install it:
 
-### Without systemd
+```bash
+sudo apt install ./figma-font-agent_0.1.0_amd64.deb
+systemctl --user enable --now figma-font-agent.service
+```
+
+The release currently ships an `amd64` package; arm64 users get the same
+binary from the static tarball via `install.sh`.
+
+### From source
+
+```bash
+git clone https://github.com/hominluo/figma-font-installer-for-linux
+cd figma-font-installer-for-linux
+./install.sh --from-source
+```
+
+Or build and run it without installing anything:
 
 ```bash
 cargo build --release
@@ -58,27 +99,40 @@ cargo build --release
 
 ### On-demand start (socket activation)
 
-The repository ships both a service and a socket unit. To let systemd start the
-agent on the first Figma request instead of running it at login:
+The release archive and every package contain `figma-font-agent.socket`. To let
+systemd start the agent on the first Figma request:
 
 ```bash
-install -Dm644 packaging/figma-font-agent.socket ~/.config/systemd/user/figma-font-agent.socket
-systemctl --user daemon-reload
-systemctl --user enable --now figma-font-agent.socket
+./install.sh --socket          # or: systemctl --user enable --now figma-font-agent.socket
 ```
+
+Do not enable the socket and the service at the same time — they compete for
+port 44950.
+
+## Use it with Figma
+
+1. Open or reload <https://www.figma.com> (or the Figma desktop web app).
+2. Open any file, click the font family picker and choose **Fonts on this
+   device** / **Local fonts**.
+3. When the browser asks to *"Access other apps and services on this device"*,
+   allow it. Figma stores the grant per origin, so this happens once.
+4. If Figma does not detect the agent, go to the main menu → **Preferences** →
+   **Permissions and helpers** → **Apps on device** and click **Connect**.
+
+Your installed fonts now show up in the picker, with previews.
 
 ## Verify it works
 
 ```bash
-# Protocol version the agent reports
+# protocol version the agent reports
 curl -s http://127.0.0.1:44950/figma/version
 # {"package":"126.11.9","version":24}
 
-# Number of files/faces the agent indexed
+# how many files/faces were indexed
 curl -s http://127.0.0.1:44950/figma/font-files \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(len(d["fontFiles"]), "files")'
 
-# CORS preflight, exactly what the browser sends
+# the CORS preflight a browser sends
 curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS \
   http://127.0.0.1:44950/figma/font-files \
   -H 'Origin: https://www.figma.com' \
@@ -87,8 +141,15 @@ curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS \
 # 204
 ```
 
-If fonts are installed while the agent is running, it picks them up on its next
-scan (every 5 minutes by default). To force a rescan immediately:
+If the agent sees the browser connect, its log shows a `/figma/font-files`
+request:
+
+```bash
+journalctl --user -u figma-font-agent -f
+```
+
+After installing a font, refresh the index immediately instead of waiting for
+the next scan:
 
 ```bash
 curl -s -X POST http://127.0.0.1:44950/figma/clear-data
@@ -106,9 +167,9 @@ figma-font-agent --init-config
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `package` | `"126.11.9"` | `package` string reported by `/figma/version`; must match the Figma client's expectation |
+| `package` | `"126.11.9"` | `package` string reported by `/figma/version` |
 | `version` | `24` | numeric protocol version reported by `/figma/version` |
-| `ports` | `[44950, 44960]` | loopback ports to bind; 44950 is the one Figma probes first |
+| `ports` | `[44950, 44960]` | loopback ports to bind; 44950 is what Figma probes first |
 | `font_directories` | `[]` | extra directories to scan in addition to fontconfig |
 | `rescan_interval_secs` | `300` | how often to look for new/changed fonts, `0` disables |
 | `enable_preview` | `true` | serve `/figma/font-preview` |
@@ -126,7 +187,8 @@ Command-line options override the file:
 
 The reported `package`/`version` are the values recovered from the macOS agent
 release `126.11.9`. If a future Figma client insists on a newer pair, bump them
-in the config file — no rebuild needed.
+in the config file — no rebuild needed. See [`man figma-font-agent`](docs/figma-font-agent.1)
+for the full reference.
 
 ## How it works
 
@@ -134,14 +196,14 @@ At startup the agent asks fontconfig for every font file (`fc-list
 --format=%{file}`) and also walks `~/.local/share/fonts` and `~/.fonts`, so a
 font dropped into either directory shows up without running `fc-cache` first.
 Each file is parsed with [`ttf-parser`](https://github.com/harfbuzz/ttf-parser),
-and keeps an in-memory index of families, styles, PostScript names, weights,
-widths and variation axes. `/figma/font-files` returns that index; `/figma/font-file`
-streams a file the index knows about; `/figma/font-preview` renders the family
-name in the requested face as SVG.
+and an in-memory index of families, styles, PostScript names, weights, widths
+and variation axes is built. `/figma/font-files` returns that index;
+`/figma/font-file` streams a file the index knows about; `/figma/font-preview`
+renders the family name in the requested face as SVG.
 
 Rescans are incremental: a file whose mtime and size did not change keeps its
 parsed faces, so a rescan of a typical desktop font library takes tens of
-milliseconds.
+milliseconds and a quiet rescan logs nothing.
 
 A preview generated by the agent (`/figma/font-preview` for Adwaita Sans Bold
 Italic):
@@ -153,7 +215,7 @@ The full wire format, including every endpoint and JSON field, is documented in
 binaries is documented in
 [`docs/reverse-engineering.md`](docs/reverse-engineering.md).
 
-## Security
+## Security model
 
 The agent is a loopback HTTP service, so it is deliberately conservative:
 
@@ -164,11 +226,18 @@ The agent is a loopback HTTP service, so it is deliberately conservative:
   the configured ports. This defeats DNS-rebinding attacks, where a hostile page
   resolves a domain it controls to `127.0.0.1` and talks to your services.
 - **CORS is restricted** to `https://www.figma.com` (and `https://figma.com`).
-- The systemd unit runs with `NoNewPrivileges`, `ProtectSystem=full` and a
-  read-only home directory.
+- The systemd unit runs with `NoNewPrivileges`, `PrivateDevices`,
+  `ProtectSystem=full`, `ProtectHome=read-only`, a restricted set of address
+  families and no kernel-tunable or module access.
 
 Unlike the official agent, this one has no telemetry, no crash reporting, no
 self-updater and no desktop-app integration.
+
+To inspect what is exposed without starting the service:
+
+```bash
+figma-font-agent --print-index | jq '.fontFiles | keys[0:5]'
+```
 
 ## Limitations
 
@@ -178,11 +247,14 @@ self-updater and no desktop-app integration.
 - **Variable fonts:** named instances are listed, but the `HVAR` advance-width
   deltas are not applied in previews. Outlines do use the instance's
   coordinates.
-- **No font *installation*.** This serves fonts already installed on the
-  system; install fonts the usual way (`~/.local/share/fonts` + `fc-cache -f`).
+- **No font installation.** This serves fonts already installed on the system;
+  install fonts the usual way (`~/.local/share/fonts` + `fc-cache -f`, your
+  package manager, or Omarchy's `omarchy install font`).
 - **No spelling service.** The official agent also exposes `/spelling/*` for
   Figma's spellchecker; it is not implemented.
-- Figma may still ask to connect after a browser restart if you clear site data
+- **Variable-font sliders:** Figma shows one entry per named instance rather
+  than free-form axis sliders.
+- Figma may ask to connect again after a browser restart if you clear site data
   or revoke the local-network permission.
 
 ## Troubleshooting
@@ -196,8 +268,8 @@ ss -tlnp | grep -E '44950|44960'
 ```
 
 Look for `listening on http://127.0.0.1:44950` in the log. If the port is taken,
-another font agent (for example the official one under Wine, or
-`figma-agent-linux`) is already running; stop it first.
+another font agent (the official one under Wine, or `figma-agent-linux`) is
+already running; stop it first.
 
 **Fonts appear but previews are missing**
 
@@ -224,13 +296,68 @@ Chrome's *Local Network Access* feature requires an explicit grant. If you
 dismissed the prompt, reset it in `chrome://settings/content/all` → search for
 `figma.com` → remove the site, then reload Figma.
 
+**Omarchy users**
+
+Omarchy's font tooling lives in `/usr/share/omarchy/bin/omarchy-font-*` and is
+driven by `omarchy font list|set|current|cjk`. It only *lists* monospace
+families, because it configures the terminal/UI font — it is not a general font
+manager, and Figma is unaffected by which one you select there. Fonts installed
+with `omarchy install font <name> <package> <family>` are regular pacman
+packages under `/usr/share/fonts`, so the agent picks them up on the next scan;
+run the `clear-data` command above to see them immediately.
+
+## Uninstall
+
+```bash
+# installed with install.sh
+curl -fsSL https://raw.githubusercontent.com/hominluo/figma-font-installer-for-linux/main/install.sh | bash -s -- --uninstall
+
+# installed from a package
+sudo pacman -R figma-font-agent      # Arch
+sudo apt remove figma-font-agent     # Debian/Ubuntu
+```
+
+The configuration in `~/.config/figma-font-agent` is never deleted for you.
+
 ## Development
 
 ```bash
 cargo test
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo run -- --print-index | head -40   # inspect what Figma would receive
 cargo run -- -v                          # run with request logging
 ```
+
+The code is deliberately small:
+
+| File | Purpose |
+| --- | --- |
+| `src/main.rs` | CLI, socket activation, startup |
+| `src/config.rs` | JSON config + defaults |
+| `src/fonts.rs` | discovery, parsing, index, named instances |
+| `src/proto.rs` | wire types and payload construction |
+| `src/preview.rs` | glyph outlines → SVG |
+| `src/server.rs` | routes, CORS/PNA, `Host` validation |
+
+## Releasing
+
+Releases are built by GitHub Actions when a `v*` tag is pushed:
+
+```bash
+# bump version in Cargo.toml and packaging/PKGBUILD, then
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The workflow produces:
+
+- `figma-font-agent-x86_64-unknown-linux-musl.tar.gz` (static)
+- `figma-font-agent-aarch64-unknown-linux-musl.tar.gz` (static)
+- `figma-font-agent_<version>_<arch>.deb`
+- `SHA256SUMS` over all of the above
+
+`install.sh` verifies the checksum before installing. To build the `.deb`
+locally: `cargo install cargo-deb && cargo deb`.
 
 ## Credits
 
