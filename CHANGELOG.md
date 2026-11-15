@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-11-15
+
+### Fixed
+
+- `install.sh` finds the binary inside the release archive, which keeps a
+  top-level directory (`figma-font-agent/`).
+- The `.deb` ships the static musl binary, so it no longer depends on
+  `libc6 >= 2.39` and installs on older Debian/Ubuntu releases.
+- Release artifacts include an arm64 `.deb`.
+
 ## [0.1.0] - 2026-11-15
 
 First release.
@@ -28,4 +38,5 @@ First release.
   (`cargo-deb`, built in CI).
 - Man page, protocol reference and reverse-engineering notes.
 
+[0.1.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.0

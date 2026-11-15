@@ -1,6 +1,6 @@
 # Maintainer: Homin Luo <homin.ro@gmail.com>
 pkgname=figma-font-agent
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='Serve system fonts to Figma in the browser (open Figma Agent reimplementation)'
 arch=('x86_64' 'aarch64')

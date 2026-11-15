@@ -187,9 +187,12 @@ install_release() {
 
     tar -xzf "$TMP_DIR/$asset" -C "$TMP_DIR"
 
-    SOURCE_BIN="$TMP_DIR/figma-font-agent"
-    SOURCE_MAN="$TMP_DIR/figma-font-agent.1"
-    SOURCE_UNIT_DIR="$TMP_DIR"
+    # Archives keep a top-level directory; be tolerant of both layouts.
+    SOURCE_BIN="$(find "$TMP_DIR" -maxdepth 2 -type f -name figma-font-agent -perm -u+x | head -n 1)"
+    [[ -n "$SOURCE_BIN" ]] || die "$asset does not contain the figma-font-agent binary"
+
+    SOURCE_MAN="$(dirname "$SOURCE_BIN")/figma-font-agent.1"
+    SOURCE_UNIT_DIR="$(dirname "$SOURCE_BIN")"
 
     "$SOURCE_BIN" --version >/dev/null 2>&1 || die "the downloaded binary does not run on this system"
 }

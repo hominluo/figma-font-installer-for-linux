@@ -75,12 +75,12 @@ Download the `.deb` from the [latest release](https://github.com/hominluo/figma-
 and install it:
 
 ```bash
-sudo apt install ./figma-font-agent_0.1.0_amd64.deb
+sudo apt install ./figma-font-agent_0.1.1-1_amd64.deb   # or _arm64.deb
 systemctl --user enable --now figma-font-agent.service
 ```
 
-The release currently ships an `amd64` package; arm64 users get the same
-binary from the static tarball via `install.sh`.
+The package contains a static binary, so it has no libc or library
+dependencies and installs on any Debian or Ubuntu release.
 
 ### From source
 
@@ -345,15 +345,15 @@ The code is deliberately small:
 Releases are built by GitHub Actions when a `v*` tag is pushed:
 
 ```bash
-# bump version in Cargo.toml and packaging/PKGBUILD, then
-git tag v0.1.0 && git push origin v0.1.0
+# bump Cargo.toml, packaging/PKGBUILD, docs/figma-font-agent.1 and CHANGELOG.md
+git tag v0.1.1 && git push origin v0.1.1
 ```
 
 The workflow produces:
 
 - `figma-font-agent-x86_64-unknown-linux-musl.tar.gz` (static)
 - `figma-font-agent-aarch64-unknown-linux-musl.tar.gz` (static)
-- `figma-font-agent_<version>_<arch>.deb`
+- `figma-font-agent_<version>-1_<arch>.deb` (static, amd64 and arm64)
 - `SHA256SUMS` over all of the above
 
 `install.sh` verifies the checksum before installing. To build the `.deb`
