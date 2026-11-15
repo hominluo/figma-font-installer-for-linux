@@ -9,21 +9,22 @@ license=('MIT')
 depends=('gcc-libs' 'fontconfig')
 makedepends=('cargo' 'rust')
 options=('!lto') # the release profile already enables LTO
-source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+_archive="$url/archive/v$pkgver.tar.gz"
+source=("$pkgname-$pkgver.tar.gz::$_archive")
+sha256sums=('02589bfc20499fe422bca61b62d336366d86fb083a99a36c01ef4a5a93bb57ee')
 
 build() {
-    cd "$pkgname-$pkgver"
+    cd "$srcdir/figma-font-installer-for-linux-$pkgver"
     cargo build --release --locked
 }
 
 check() {
-    cd "$pkgname-$pkgver"
+    cd "$srcdir/figma-font-installer-for-linux-$pkgver"
     cargo test --release --locked
 }
 
 package() {
-    cd "$pkgname-$pkgver"
+    cd "$srcdir/figma-font-installer-for-linux-$pkgver"
 
     install -Dm755 target/release/figma-font-agent \
         "$pkgdir/usr/bin/figma-font-agent"
