@@ -131,7 +131,9 @@ in the config file — no rebuild needed.
 ## How it works
 
 At startup the agent asks fontconfig for every font file (`fc-list
---format=%{file}`), parses each one with [`ttf-parser`](https://github.com/harfbuzz/ttf-parser),
+--format=%{file}`) and also walks `~/.local/share/fonts` and `~/.fonts`, so a
+font dropped into either directory shows up without running `fc-cache` first.
+Each file is parsed with [`ttf-parser`](https://github.com/harfbuzz/ttf-parser),
 and keeps an in-memory index of families, styles, PostScript names, weights,
 widths and variation axes. `/figma/font-files` returns that index; `/figma/font-file`
 streams a file the index knows about; `/figma/font-preview` renders the family

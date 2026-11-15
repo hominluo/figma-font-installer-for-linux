@@ -192,8 +192,12 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
     Ok(FontIndex { files, face_count })
 }
 
-/// Every font file fontconfig knows about, plus anything in the extra
-/// directories from the config file.
+/// Every font file fontconfig knows about, plus anything in the user's font
+/// directories and the extra directories from the config file.
+///
+/// The user directories are walked even when `fc-list` works: dropping a font
+/// into `~/.local/share/fonts` should show up without remembering to run
+/// `fc-cache` first. Duplicates are deduplicated by path.
 pub fn discover_font_files(settings: &Settings) -> Vec<PathBuf> {
     let mut paths = BTreeSet::new();
     let mut used_fontconfig = false;
@@ -218,9 +222,13 @@ pub fn discover_font_files(settings: &Settings) -> Vec<PathBuf> {
     }
 
     if !used_fontconfig || paths.is_empty() {
-        for directory in standard_font_directories() {
+        for directory in system_font_directories() {
             walk(&directory, &mut paths, 0);
         }
+    }
+
+    for directory in user_font_directories() {
+        walk(&directory, &mut paths, 0);
     }
 
     for directory in &settings.font_directories {
@@ -230,20 +238,25 @@ pub fn discover_font_files(settings: &Settings) -> Vec<PathBuf> {
     paths.into_iter().filter(|path| path.is_file()).collect()
 }
 
-fn standard_font_directories() -> Vec<PathBuf> {
-    let mut directories = vec![
+fn system_font_directories() -> Vec<PathBuf> {
+    vec![
         PathBuf::from("/usr/share/fonts"),
         PathBuf::from("/usr/local/share/fonts"),
+        // Flatpak and toolbox expose the host's fonts here.
         PathBuf::from("/run/host/fonts"),
-    ];
+    ]
+}
+
+fn user_font_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME").filter(|dir| !dir.is_empty()) {
+        directories.push(PathBuf::from(data_home).join("fonts"));
+    }
 
     if let Some(home) = std::env::var_os("HOME").filter(|home| !home.is_empty()) {
         directories.push(PathBuf::from(&home).join(".local/share/fonts"));
         directories.push(PathBuf::from(&home).join(".fonts"));
-    }
-
-    if let Some(data_home) = std::env::var_os("XDG_DATA_HOME").filter(|dir| !dir.is_empty()) {
-        directories.push(PathBuf::from(data_home).join("fonts"));
     }
 
     directories
