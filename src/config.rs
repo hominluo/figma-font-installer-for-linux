@@ -123,6 +123,13 @@ pub fn load(explicit: Option<&Path>) -> Result<Settings> {
 /// Writes a commented example config next to the default location, unless one
 /// already exists. Used by `--init-config`.
 pub fn write_example(path: &Path) -> Result<()> {
+    if path.exists() {
+        bail!(
+            "{} already exists; not overwriting it (edit it directly, or remove it first)",
+            path.display()
+        );
+    }
+
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("could not create {}", parent.display()))?;

@@ -11,7 +11,7 @@ browser build of Figma can list and render your system fonts on Linux.
 Figma (browser)  ──►  http://127.0.0.1:44950/figma/*  ──►  figma-font-agent  ──►  fontconfig
 ```
 
-- Single static-ish Rust binary, no HarfBuzz, no telemetry, no auto-updater.
+- A single Rust binary, no HarfBuzz, no telemetry, no auto-updater.
 - Reads fonts from fontconfig (`fc-list`) and serves them from `127.0.0.1` only.
 - Handles TrueType/OpenType collections and variable fonts (named instances are
   exposed as individual styles).
