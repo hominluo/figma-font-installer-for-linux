@@ -1,0 +1,22 @@
+[Unit]
+Description=Figma font agent (serve system fonts to Figma in the browser)
+Documentation=https://github.com/hominluo/figma-font-installer-for-linux
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/figma-font-agent
+Restart=on-failure
+RestartSec=2
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+# Read-only view of the system and the home directory; the agent only needs to
+# read font files and fontconfig's cache.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=-%h/.cache/fontconfig
+
+[Install]
+WantedBy=default.target

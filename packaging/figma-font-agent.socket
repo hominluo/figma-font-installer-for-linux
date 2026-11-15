@@ -1,0 +1,13 @@
+[Unit]
+Description=Figma font agent socket
+
+[Socket]
+# The port Figma probes first. With socket activation the agent starts on the
+# first request instead of at login. Port 44960 is deliberately not listed so a
+# busy fallback port cannot take the whole unit down.
+ListenStream=127.0.0.1:44950
+Accept=no
+NoDelay=yes
+
+[Install]
+WantedBy=sockets.target
