@@ -282,12 +282,13 @@ cat <<EOF
 
 figma-font-agent is installed.
 
-Next steps:
-  1. Reload https://www.figma.com and open a file.
-  2. Open the font family picker and choose "Fonts on this device".
-  3. Allow the browser's "Access other apps and services on this device" prompt.
-  4. If Figma does not detect the agent: menu -> Preferences ->
-     Permissions and helpers -> Apps on device -> Connect.
+Connect Figma once (the font picker stays empty until you do):
+  1. Open a design file on https://www.figma.com.
+  2. Font picker -> "Installed by you" -> "Use local fonts"
+     (or menu -> Preferences -> Permissions and helpers -> Apps on device).
+  3. Click "I'm ready to connect". Skip "Downloads page": this agent
+     replaces Figma's installer.
+  4. Allow the browser's "Access other apps and services on this device" prompt.
 
 Logs:    journalctl --user -u $SERVICE -f
 Rescan:  curl -s -X POST http://127.0.0.1:44950/figma/clear-data

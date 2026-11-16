@@ -51,6 +51,9 @@ system; all of them exist for x86_64 and aarch64 except the Arch package
 | [Flatpak](#flatpak) | a sandboxed install | `figma-font-agent-<version>-x86_64.flatpak` |
 | [Archive](#archive) | installing by hand, offline | `figma-font-agent-x86_64-unknown-linux-musl.tar.gz` |
 
+Whichever you choose, finish with [Use it with Figma](#use-it-with-figma):
+Figma has to be connected to the agent once.
+
 `SHA256SUMS` in the release covers every file. The commands below are meant to
 be run in the directory you downloaded the file to; the `*` stands for the
 version.
@@ -196,18 +199,65 @@ port 44950.
 
 ## Use it with Figma
 
-1. Open a design file on <https://www.figma.com>.
-2. Open the main menu (the Figma logo) → **Preferences** → **Permissions and
-   helpers**.
-3. Under **Apps on device**, click **Connect**. Figma's instructions mention
-   its own font installer; with the agent running you can go straight to
-   **Connect**.
-4. When the browser asks to *"Access other apps and services on this device"*,
-   allow it. The grant is stored per site, so this happens once.
+Installing the agent is not the last step: Figma has to be connected to it
+once, in the browser. Until then the font picker stays empty, even with the
+agent running and your fonts installed.
 
-**Apps on device** now shows **Connected**, and your installed fonts show up
-in the font picker, with previews. You do not need to change your browser's
-user agent.
+### Connect Figma (once per browser)
+
+1. Make sure the agent is running:
+
+   ```bash
+   curl -s http://127.0.0.1:44950/figma/version
+   # {"package":"126.11.9","version":24}
+   ```
+
+2. Open any design file on <https://www.figma.com>.
+3. Start the connection. Either way works:
+   - In the font picker, choose **Installed by you** and click **Use local
+     fonts**. A **Use local fonts** dialog opens.
+   - Or open the main menu (the Figma logo) → **Preferences** → **Permissions
+     and helpers**, and under **Apps on device** click **Show me how to
+     connect**.
+4. Click **I'm ready to connect** (or **Connect**). Do **not** click
+   **Downloads page**: Figma's instructions assume its own font installer or
+   desktop app, which do not exist for Linux. The agent takes their place.
+5. The browser asks whether figma.com may *"Access other apps and services on
+   this device"* (the wording differs between browsers). Click **Allow**. The
+   choice is remembered for figma.com, so this happens once.
+6. **Apps on device** now shows **Connected**. Open the font picker again and
+   your fonts are listed under **Installed by you**, with previews.
+
+You do not need to change your browser's user agent, and **Clipboard access**
+or **Microphone access** can stay blocked: they are separate permissions.
+
+To watch the connection happen, follow the agent's log while you click
+**I'm ready to connect**. The line `https://www.figma.com is connected` means
+the browser got through:
+
+```bash
+journalctl --user -u figma-font-agent -f
+```
+
+### After that
+
+- Figma reconnects by itself whenever the agent is running. Nothing has to be
+  done per file or per session.
+- A font you install shows up the next time Figma asks for the font list;
+  reload the Figma tab if it is not there yet. See
+  [Installing and managing fonts](#installing-and-managing-fonts).
+- Figma asks to connect again if you clear figma.com's site data or reset its
+  permissions.
+
+### Still empty after connecting?
+
+| What you see | What to do |
+| --- | --- |
+| The "Use local fonts" dialog keeps coming back | The agent is not reachable. Check `systemctl --user status figma-font-agent` and see [Troubleshooting](#troubleshooting). |
+| No browser prompt appeared | Click the icon left of the address bar → **Site settings** → set **Local network access** (or **Apps on device**) to **Allow**, then reload the tab. |
+| You clicked **Block** by mistake | Same place: set it back to **Allow** and reload. |
+| The agent's log shows nothing when you click connect | An ad blocker or privacy extension is blocking `127.0.0.1`. Allow it on figma.com. |
+| Connected, but one font is missing | Check `fc-list \| grep -i 'name'`. If fontconfig does not list it, it is not installed where the desktop looks, or a font manager disabled it. |
 
 ## Installing and managing fonts
 
@@ -412,8 +462,11 @@ added with `font_directories`.
 **The browser blocks the request**
 
 Chrome's *Local Network Access* feature requires an explicit grant. If you
-dismissed the prompt, reset it in `chrome://settings/content/all` → search for
-`figma.com` → remove the site, then reload Figma.
+dismissed or blocked the prompt, open the site settings from the icon left of
+the address bar and allow **Local network access**, or reset figma.com
+entirely in `chrome://settings/content/all` (search for `figma.com`, remove
+the site), then reload Figma and connect again as in
+[Connect Figma](#connect-figma-once-per-browser).
 
 ## Uninstall
 
