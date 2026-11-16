@@ -1,7 +1,14 @@
 //! HTTP surface: the `/figma/*` API plus the CORS/PNA gate browsers need to
 //! reach a loopback service from `https://www.figma.com`.
 
-use std::{path::Path, sync::Arc, time::Instant};
+use std::{
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 use axum::{
     body::Body,
@@ -16,7 +23,10 @@ use axum::{
     Json, Router,
 };
 use serde::Deserialize;
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, RwLock},
+};
 
 use crate::{
     config::Settings,
@@ -31,10 +41,42 @@ const ALLOWED_ORIGINS: [&str; 3] = [
     "https://www.figma.com:443",
 ];
 
+/// How long `/figma/font-files` answers from the index without looking at the
+/// disk again. Figma asks for the list in bursts; one scan covers a burst.
+const FRESH_FOR: Duration = Duration::from_secs(2);
+
 #[derive(Clone)]
 pub struct AppState {
     pub index: Arc<RwLock<FontIndex>>,
     pub settings: Arc<Settings>,
+    /// The ports actually being served, which is what a `Host` header may name.
+    ports: Arc<[u16]>,
+    /// When the index was last rebuilt. Holding the lock is what makes scans
+    /// run one at a time.
+    scanned_at: Arc<Mutex<Instant>>,
+    /// Set once the first request from a browser has been logged.
+    connected: Arc<AtomicBool>,
+}
+
+impl AppState {
+    pub fn new(index: FontIndex, settings: Settings, listeners: &[TcpListener]) -> Self {
+        // Taken from the sockets rather than the settings: with socket
+        // activation systemd picks the port, and a configured port may have
+        // failed to bind.
+        let ports = listeners
+            .iter()
+            .filter_map(|listener| listener.local_addr().ok())
+            .map(|address| address.port())
+            .collect();
+
+        Self {
+            index: Arc::new(RwLock::new(index)),
+            settings: Arc::new(settings),
+            ports,
+            scanned_at: Arc::new(Mutex::new(Instant::now())),
+            connected: Arc::new(AtomicBool::new(false)),
+        }
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -45,7 +87,6 @@ pub fn router(state: AppState) -> Router {
         .route("/figma/font-preview", get(font_preview))
         .route("/figma/health", get(health))
         .route("/figma/clear-data", post(clear_data))
-        .route("/figma/desktop/can-open-url", get(can_open_url))
         .with_state(state.clone())
         .layer(middleware::from_fn_with_state(state, gate))
 }
@@ -95,8 +136,14 @@ async fn version(State(state): State<AppState>) -> Json<proto::VersionResponse> 
 }
 
 async fn font_files(State(state): State<AppState>) -> Json<proto::FontFilesResponse> {
+    // Figma asks for this list whenever it wants to know what is installed, so
+    // this is the moment a font added a second ago has to be in the index.
+    if !state.settings.rescan_interval.is_zero() {
+        rescan(&state, FRESH_FOR).await;
+    }
+
     let index = state.index.read().await;
-    info!(
+    debug!(
         "/figma/font-files -> {} faces in {} files",
         index.face_count,
         index.files.len()
@@ -252,16 +299,18 @@ struct Selection {
 /// Figma occasionally asks the agent to drop its cache (after a font install).
 /// Rebuilding also happens on the background timer, so this is a convenience.
 async fn clear_data(State(state): State<AppState>) -> StatusCode {
-    rescan(&state).await;
+    rescan(&state, Duration::ZERO).await;
     StatusCode::OK
 }
 
-async fn can_open_url() -> impl IntoResponse {
-    // We only serve fonts; "open in desktop app" stays a browser concern.
-    Json(false)
-}
+/// Rebuilds the index unless it is younger than `max_age`. A caller that had
+/// to wait for another scan finds the index fresh and returns without its own.
+async fn rescan(state: &AppState, max_age: Duration) {
+    let mut scanned_at = state.scanned_at.lock().await;
+    if scanned_at.elapsed() < max_age {
+        return;
+    }
 
-async fn rescan(state: &AppState) {
     let settings = state.settings.clone();
     let previous = state.index.read().await.clone();
 
@@ -272,6 +321,8 @@ async fn rescan(state: &AppState) {
         Ok(Err(error)) => warn!("font rescan failed: {error:#}"),
         Err(error) => warn!("font rescan task failed: {error}"),
     }
+
+    *scanned_at = Instant::now();
 }
 
 pub fn spawn_rescan_timer(state: AppState) {
@@ -283,7 +334,7 @@ pub fn spawn_rescan_timer(state: AppState) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(interval).await;
-            rescan(&state).await;
+            rescan(&state, Duration::ZERO).await;
         }
     });
 }
@@ -304,7 +355,7 @@ async fn gate(State(state): State<AppState>, request: Request, next: Next) -> Re
             .headers()
             .get(header::HOST)
             .and_then(|value| value.to_str().ok()),
-        &state.settings.ports,
+        &state.ports,
     ) {
         debug!("{method} {path} -> 403 (bad Host header)");
         return (StatusCode::FORBIDDEN, "invalid Host header").into_response();
@@ -315,6 +366,22 @@ async fn gate(State(state): State<AppState>, request: Request, next: Next) -> Re
         .get(header::ORIGIN)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
+
+    // CORS only stops another site from reading a response; the request itself
+    // would still run. Nothing but Figma has a reason to talk to the agent.
+    if !origin_allowed(origin.as_deref()) {
+        debug!("{method} {path} -> 403 (origin not allowed)");
+        return (StatusCode::FORBIDDEN, "origin not allowed").into_response();
+    }
+
+    // The one line worth having in the journal: proof that the browser got
+    // through. Every later request is debug output.
+    if let Some(origin) = &origin {
+        if !state.connected.swap(true, Ordering::Relaxed) {
+            info!("{origin} is connected");
+        }
+    }
+
     let requested_headers = request
         .headers()
         .get(header::ACCESS_CONTROL_REQUEST_HEADERS)
@@ -348,21 +415,19 @@ async fn gate(State(state): State<AppState>, request: Request, next: Next) -> Re
     response
 }
 
-fn apply_cors(headers: &mut HeaderMap, origin: Option<&str>, requested_headers: Option<&str>) {
+/// Requests without an `Origin` come from non-browser clients (curl) and from
+/// plain navigations, neither of which can hand a response to another site.
+fn origin_allowed(origin: Option<&str>) -> bool {
     match origin {
-        Some(origin) if ALLOWED_ORIGINS.contains(&origin) => {
-            if let Ok(value) = HeaderValue::from_str(origin) {
-                headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
-            }
-        }
-        // Non-browser clients (curl, the test suite) do not send Origin.
-        None => {
-            headers.insert(
-                header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                HeaderValue::from_static(ALLOWED_ORIGINS[0]),
-            );
-        }
-        Some(_) => {}
+        Some(origin) => ALLOWED_ORIGINS.contains(&origin),
+        None => true,
+    }
+}
+
+/// `origin` has already passed [`origin_allowed`].
+fn apply_cors(headers: &mut HeaderMap, origin: Option<&str>, requested_headers: Option<&str>) {
+    if let Ok(value) = HeaderValue::from_str(origin.unwrap_or(ALLOWED_ORIGINS[0])) {
+        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
     }
 
     headers.insert(
@@ -400,7 +465,7 @@ fn host_allowed(host: Option<&str>, ports: &[u16]) -> bool {
     }
 
     match port {
-        Some(port) => ports.is_empty() || ports.contains(&port),
+        Some(port) => ports.contains(&port),
         None => true,
     }
 }
@@ -449,7 +514,18 @@ fn bad_request(message: &'static str) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{host_allowed, split_host};
+    use super::{host_allowed, origin_allowed, split_host};
+
+    #[test]
+    fn only_figma_origins_are_served() {
+        assert!(origin_allowed(None));
+        assert!(origin_allowed(Some("https://www.figma.com")));
+        assert!(origin_allowed(Some("https://figma.com")));
+        assert!(!origin_allowed(Some("https://evil.example")));
+        assert!(!origin_allowed(Some("http://www.figma.com")));
+        assert!(!origin_allowed(Some("https://www.figma.com.evil.example")));
+        assert!(!origin_allowed(Some("null")));
+    }
 
     #[test]
     fn host_header_validation() {

@@ -1,10 +1,10 @@
 //! Font discovery and parsing.
 //!
-//! Discovery uses `fc-list` (fontconfig) so that everything the user sees in
-//! their desktop font picker is also visible to Figma. If fontconfig is not
-//! available we fall back to walking the standard font directories. The index is
-//! rebuilt incrementally: files whose mtime and size did not change keep their
-//! parsed faces.
+//! Discovery uses `fc-list` (fontconfig) so that Figma sees exactly what the
+//! desktop's own font pickers see, including fonts a font manager has disabled.
+//! If fontconfig is not available we fall back to walking the standard font
+//! directories. The index is rebuilt incrementally: files whose mtime and size
+//! did not change keep their parsed faces.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -25,6 +25,9 @@ pub struct FontIndex {
     /// what Figma sends back in `?file=`, so it must not be normalized.
     pub files: BTreeMap<String, FontFile>,
     pub face_count: usize,
+    /// Files that could not be parsed, with the mtime and size they had then,
+    /// so a rescan does not read them again until they change.
+    pub unusable: BTreeMap<String, (u64, u64)>,
 }
 
 #[derive(Debug, Clone)]
@@ -128,10 +131,10 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
     let paths = discover_font_files(settings);
 
     let mut files = BTreeMap::new();
+    let mut unusable = BTreeMap::new();
     let mut face_count = 0usize;
     let mut parsed = 0usize;
     let mut reused = 0usize;
-    let mut failed = 0usize;
 
     for path in paths {
         let Ok(metadata) = fs::metadata(&path) else {
@@ -147,12 +150,17 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
         let size = metadata.len();
         let key = path.to_string_lossy().into_owned();
 
-        if let Some(cached) = previous.and_then(|index| index.files.get(&key)) {
-            if cached.modified_at == modified_at && cached.size == size && !cached.faces.is_empty()
-            {
-                face_count += cached.faces.len();
-                files.insert(key, cached.clone());
-                reused += 1;
+        if let Some(previous) = previous {
+            if let Some(cached) = previous.files.get(&key) {
+                if cached.modified_at == modified_at && cached.size == size {
+                    face_count += cached.faces.len();
+                    files.insert(key, cached.clone());
+                    reused += 1;
+                    continue;
+                }
+            }
+            if previous.unusable.get(&key) == Some(&(modified_at, size)) {
+                unusable.insert(key, (modified_at, size));
                 continue;
             }
         }
@@ -171,10 +179,12 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
                     },
                 );
             }
-            Ok(None) => failed += 1,
+            Ok(None) => {
+                unusable.insert(key, (modified_at, size));
+            }
             Err(error) => {
-                failed += 1;
                 debug!("skipping {}: {error:#}", path.display());
+                unusable.insert(key, (modified_at, size));
             }
         }
     }
@@ -185,26 +195,37 @@ pub fn scan(settings: &Settings, previous: Option<&FontIndex>) -> Result<FontInd
         files.len(),
         parsed,
         reused,
-        failed,
+        unusable.len(),
         started.elapsed().map(|d| d.as_millis()).unwrap_or(0)
     );
 
-    // A quiet periodic rescan should not fill the journal every five minutes.
-    if previous.is_none() || parsed > 0 {
+    // Rescans happen on every font-list request; only one that found a font
+    // added, changed or removed is worth a line in the journal.
+    let changed = match previous {
+        Some(previous) => parsed > 0 || files.len() != previous.files.len(),
+        None => true,
+    };
+    if changed {
         info!("{summary}");
     } else {
         debug!("{summary}");
     }
 
-    Ok(FontIndex { files, face_count })
+    Ok(FontIndex {
+        files,
+        face_count,
+        unusable,
+    })
 }
 
-/// Every font file fontconfig knows about, plus anything in the user's font
-/// directories and the extra directories from the config file.
+/// Every font file fontconfig knows about, plus anything in the extra
+/// directories from the config file.
 ///
-/// The user directories are walked even when `fc-list` works: dropping a font
-/// into `~/.local/share/fonts` should show up without remembering to run
-/// `fc-cache` first. Duplicates are deduplicated by path.
+/// fontconfig is authoritative when it answers. It notices a font dropped into
+/// `~/.local/share/fonts` by itself (no `fc-cache` needed), and it leaves out
+/// the fonts a font manager has disabled with a `rejectfont` rule, which a walk
+/// of the directory would wrongly bring back. The standard directories are
+/// only walked when `fc-list` is missing or reports nothing.
 pub fn discover_font_files(settings: &Settings) -> Vec<PathBuf> {
     let mut paths = BTreeSet::new();
     let mut used_fontconfig = false;
@@ -229,13 +250,19 @@ pub fn discover_font_files(settings: &Settings) -> Vec<PathBuf> {
     }
 
     if !used_fontconfig || paths.is_empty() {
-        for directory in system_font_directories() {
+        for directory in system_font_directories()
+            .into_iter()
+            .chain(user_font_directories())
+        {
             walk(&directory, &mut paths, 0);
         }
     }
 
-    for directory in user_font_directories() {
-        walk(&directory, &mut paths, 0);
+    // Inside a Flatpak sandbox fontconfig also lists the runtime's own fonts,
+    // which are not installed on the user's system. The host's are under
+    // /run/host.
+    if Path::new("/.flatpak-info").exists() {
+        paths.retain(|path| path.starts_with("/run/host"));
     }
 
     for directory in &settings.font_directories {
@@ -249,8 +276,10 @@ fn system_font_directories() -> Vec<PathBuf> {
     vec![
         PathBuf::from("/usr/share/fonts"),
         PathBuf::from("/usr/local/share/fonts"),
-        // Flatpak and toolbox expose the host's fonts here.
+        // Flatpak exposes the host's system and user fonts here.
         PathBuf::from("/run/host/fonts"),
+        PathBuf::from("/run/host/local-fonts"),
+        PathBuf::from("/run/host/user-fonts"),
     ]
 }
 

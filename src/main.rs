@@ -14,10 +14,9 @@ mod preview;
 mod proto;
 mod server;
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use tokio::sync::RwLock;
 
 use crate::{logging::Level, server::AppState};
 
@@ -152,6 +151,10 @@ async fn run() -> Result<()> {
         info!("config: {}", path.display());
     }
 
+    // Claim systemd's sockets before the scan starts `fc-list`, so no child
+    // process ever sees the activation environment or the listening socket.
+    let activated = socket_activated();
+
     let scan_settings = settings.clone();
     let index = tokio::task::spawn_blocking(move || fonts::scan(&scan_settings, None)).await??;
 
@@ -161,14 +164,8 @@ async fn run() -> Result<()> {
         return Ok(());
     }
 
-    let state = AppState {
-        index: Arc::new(RwLock::new(index)),
-        settings: Arc::new(settings),
-    };
-
-    let activated = socket_activated();
     let listeners = if activated.is_empty() {
-        server::bind(&state.settings.ports).await
+        server::bind(&settings.ports).await
     } else {
         info!(
             "using {} socket-activated listener(s) from systemd",
@@ -180,9 +177,11 @@ async fn run() -> Result<()> {
     if listeners.is_empty() {
         bail!(
             "could not bind any port ({:?}); is another Figma agent already running?",
-            state.settings.ports
+            settings.ports
         );
     }
+
+    let state = AppState::new(index, settings, &listeners);
 
     server::spawn_rescan_timer(state.clone());
     server::serve(state, listeners).await
@@ -222,14 +221,26 @@ fn socket_activated() -> Vec<tokio::net::TcpListener> {
     }
 
     // Do not leak the activation environment into `fc-list` and friends.
-    std::env::remove_var("LISTEN_FDS");
-    std::env::remove_var("LISTEN_PID");
+    for variable in ["LISTEN_FDS", "LISTEN_PID", "LISTEN_FDNAMES"] {
+        std::env::remove_var(variable);
+    }
 
     let mut listeners = Vec::new();
 
     for index in 0..count {
         // SAFETY: systemd passes fds starting at 3 and hands over ownership.
-        let listener = unsafe { std::net::TcpListener::from_raw_fd(3 + index) };
+        let inherited = unsafe { std::net::TcpListener::from_raw_fd(3 + index) };
+
+        // systemd hands the socket over without close-on-exec, so it would be
+        // inherited by every child. A duplicate has the flag set.
+        let listener = match inherited.try_clone() {
+            Ok(listener) => listener,
+            Err(error) => {
+                warn!("socket activation: fd {} is unusable: {error}", 3 + index);
+                continue;
+            }
+        };
+        drop(inherited);
         let _ = listener.set_nonblocking(true);
 
         match tokio::net::TcpListener::from_std(listener) {
