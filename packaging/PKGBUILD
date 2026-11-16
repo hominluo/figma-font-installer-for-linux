@@ -11,7 +11,7 @@ makedepends=('cargo' 'rust')
 options=('!lto' '!debug') # the release profile already enables LTO and strips
 _archive="$url/archive/v$pkgver.tar.gz"
 source=("$pkgname-$pkgver.tar.gz::$_archive")
-sha256sums=('02589bfc20499fe422bca61b62d336366d86fb083a99a36c01ef4a5a93bb57ee')
+sha256sums=('810b72773f21ce4c978d09522c7e0bef8c83ba68562b104afc54363b4488673e')
 
 build() {
     cd "$srcdir/figma-font-installer-for-linux-$pkgver"
