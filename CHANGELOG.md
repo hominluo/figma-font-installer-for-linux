@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-15
+
+### Added
+
+- `.rpm`, AppImage and Flatpak packages for x86_64 and aarch64, and a prebuilt
+  Arch package for x86_64, next to the archive and the `.deb`.
+- The release archive contains `install.sh` and installs itself without a
+  download. The AppImage does the same with `--install`.
+- The release workflow can be started by hand to build and smoke-test every
+  package without publishing.
+
+### Changed
+
+- The font list is refreshed whenever Figma asks for it, so a font that was
+  installed, removed or disabled is picked up at once instead of within five
+  minutes.
+- fontconfig decides which fonts exist. The user font directories are no longer
+  walked separately, which had brought back fonts a font manager had disabled.
+  Fonts dropped into `~/.local/share/fonts` are still found without `fc-cache`.
+- Requests whose `Origin` is not Figma's are refused with `403`. Before, CORS
+  kept other sites from reading a response but the request still ran.
+- `/figma/desktop/can-open-url` is gone and answers `404`, as the protocol
+  notes always said.
+- The first browser connection is logged once; per-request lines are debug
+  output.
+- The `.deb` recommends `fontconfig`.
+
+### Fixed
+
+- `install.sh --uninstall`, `--help` and `--from-source` exited with status 1
+  after succeeding.
+- `install.sh` stopped without a message when `systemctl --user` had no manager
+  to talk to.
+- With socket activation on a port other than 44950 or 44960, every request was
+  rejected for its `Host` header.
+- With socket activation, `fc-list` inherited the listening socket and the
+  `LISTEN_*` environment.
+- Font files that cannot be parsed were read again on every rescan.
+
 ## [0.1.1] - 2026-11-15
 
 ### Fixed
@@ -38,5 +77,6 @@ First release.
   (`cargo-deb`, built in CI).
 - Man page, protocol reference and reverse-engineering notes.
 
+[0.2.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.0

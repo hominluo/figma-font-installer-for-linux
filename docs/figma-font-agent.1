@@ -7,9 +7,10 @@ figma-font-agent \- serve Linux system fonts to Figma in the browser
 .SH DESCRIPTION
 .B figma-font-agent
 is a small loopback HTTP service that implements the local font protocol used
-by Figma for the web. It indexes the fonts known to fontconfig (and the fonts
-in the user's font directories), then answers the requests Figma sends to
-\fBhttp://127.0.0.1:44950/figma/\fR.
+by Figma for the web. It indexes the fonts known to fontconfig, then answers
+the requests Figma sends to \fBhttp://127.0.0.1:44950/figma/\fR. The index is
+refreshed whenever Figma asks for the font list, so a font that was just
+installed, removed or disabled needs no further step.
 .PP
 The service listens on loopback only. It never writes to the font
 directories, contacts the network, or reports telemetry.
@@ -58,8 +59,9 @@ Array of loopback ports to bind (default [44950, 44960]).
 Array of extra directories to scan for fonts.
 .TP
 .B rescan_interval_secs
-How often to look for new or changed fonts, in seconds. 0 disables rescans
-(default 300).
+How often to look for new or changed fonts in the background, in seconds
+(default 300). 0 turns off every automatic rescan, including the one that
+precedes each font list; a POST to \fB/figma/clear-data\fR still rescans.
 .TP
 .B enable_preview
 Boolean; set to false to disable the font preview endpoint (default true).
@@ -77,9 +79,10 @@ Used to locate the configuration file.
 .I ~/.config/figma-font-agent/config.json
 User configuration.
 .TP
-.I ~/.local/share/fonts ", " ~/.fonts
-User font directories that are always scanned in addition to fontconfig's
-list.
+.I ~/.local/share/fonts
+Where fontconfig looks for the user's own fonts. Files placed here are found
+without running \fBfc-cache\fR. The standard font directories are only walked
+directly when \fBfc-list\fR is unavailable.
 .SH EXAMPLES
 Run in the foreground with request logging:
 .PP
@@ -99,8 +102,8 @@ Inspect the font list Figma will receive:
     figma-font-agent --print-index | jq '.fontFiles | length'
 .fi
 .SH SECURITY
-The service binds to 127.0.0.1 only, restricts CORS to
-\fIhttps://www.figma.com\fR, validates the \fBHost\fR header to defeat
+The service binds to 127.0.0.1 only, refuses requests whose \fBOrigin\fR is
+not \fIhttps://www.figma.com\fR, validates the \fBHost\fR header to defeat
 DNS rebinding, and serves only paths that are present in its own font index.
 .SH SEE ALSO
 Full protocol and reverse-engineering notes:

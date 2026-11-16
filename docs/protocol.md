@@ -20,7 +20,8 @@ because the browser flow only requires `44950`.
 
 ### CORS
 
-Figma is served from `https://www.figma.com`, so the agent answers with:
+Figma is served from `https://www.figma.com`. This implementation answers a
+request from any other origin with `403`, and Figma's with:
 
 ```
 Access-Control-Allow-Origin: https://www.figma.com
@@ -131,10 +132,11 @@ Query parameters (all sent by Figma):
 | `postscript` | PostScript name, the primary matching key |
 | `font_size` | size in **points** (the official agent converts pt → px as `× 96 / 72`) |
 
-Response: an image of the family name rendered in that face. The official agent
-returns a raster image; this implementation returns `image/svg+xml`, which the
-browser scales without loss. `404` means "no preview for this face", and Figma
-falls back to its default tile.
+Response: an image of the family name rendered in that face. The format the
+official agent answers with was not captured. This implementation returns
+`image/svg+xml`, as `neetly/figma-agent-linux` does, which the browser scales
+without loss. `404` means "no preview for this face", and Figma falls back to
+its default tile.
 
 ### `GET /figma/health`
 
@@ -144,8 +146,9 @@ short body is enough.
 ### `POST /figma/clear-data`
 
 Drops the agent's cached index; the next `/figma/font-files` request re-scans.
-Useful after installing fonts. The official agent uses this when Figma's
-*Fonts on this device* panel is refreshed.
+The official agent uses this when Figma's *Fonts on this device* panel is
+refreshed. This implementation rescans at once, and also before every
+`/figma/font-files` answer, so the call is only needed to force a rescan.
 
 ## Endpoints detected but not implemented
 
