@@ -340,6 +340,9 @@ The code is deliberately small:
 | `src/preview.rs` | glyph outlines → SVG |
 | `src/server.rs` | routes, CORS/PNA, `Host` validation |
 
+Maintainer notes — release procedure, decisions, known gaps — live in
+[`docs/handoff.md`](docs/handoff.md).
+
 ## Releasing
 
 Releases are built by GitHub Actions when a `v*` tag is pushed:
