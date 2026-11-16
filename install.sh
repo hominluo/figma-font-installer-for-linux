@@ -3,9 +3,10 @@
 # Installer for figma-font-agent.
 #
 #   ./install.sh                     # download the latest release, install, start
+#                                    # (next to a release binary: install that one)
 #   ./install.sh --from-source       # build this checkout and install it
 #   ./install.sh --socket            # start on demand (systemd socket activation)
-#   ./install.sh --version v0.1.0    # install a specific release
+#   ./install.sh --version v0.2.0    # install a specific release
 #   ./install.sh --prefix /usr/local # install somewhere else
 #   ./install.sh --uninstall         # stop and remove
 #
@@ -29,7 +30,8 @@ VERSION=""
 ACTION="install"
 
 TMP_DIR=""
-cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+# Must not fail: under `set -e` a failing EXIT trap replaces the exit status.
+cleanup() { if [[ -n "$TMP_DIR" ]]; then rm -rf "$TMP_DIR"; fi; }
 trap cleanup EXIT
 
 info() { printf '\033[1m==>\033[0m %s\n' "$*"; }
@@ -40,10 +42,11 @@ usage() {
     cat <<'EOF'
 Usage: install.sh [options]
 
-  (no options)        download the latest release, install and start it
+  (no options)        download the latest release, install and start it;
+                      run from an unpacked release archive, install its binary
   --from-source       build this checkout with cargo and install it
   --socket            start on demand with systemd socket activation
-  --version <tag>     install a specific release, e.g. --version v0.1.0
+  --version <tag>     install a specific release, e.g. --version v0.2.0
   --prefix <dir>      install under <dir> (default: ~/.local)
   --uninstall         stop the agent and remove its files
   -h, --help          show this help
@@ -80,16 +83,25 @@ case "$BIN_DIR" in
     *'|'* | *'&'* | *'\'*) die "BIN_DIR must not contain |, & or \\" ;;
 esac
 
-# Directories of this script and of the repository, when run from a checkout.
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-}")" 2>/dev/null && pwd || true)"
+# Where this script lives, when it was run from a file. Piped into bash
+# (`curl ... | bash`) it lives nowhere, and the current directory says nothing
+# about what to install.
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+fi
 ROOT="${SCRIPT_DIR:-$PWD}"
 
 is_checkout() {
     [[ -f "$1/Cargo.toml" ]] && grep -q '^name = "figma-font-agent"' "$1/Cargo.toml"
 }
 
+# A user manager that answers, not just a `systemctl` binary: containers, WSL
+# and `su` sessions have the latter without the former.
 have_systemd() {
-    command -v systemctl >/dev/null 2>&1 && [[ -n "${XDG_RUNTIME_DIR:-}" ]]
+    command -v systemctl >/dev/null 2>&1 \
+        && [[ -n "${XDG_RUNTIME_DIR:-}" ]] \
+        && systemctl --user show-environment >/dev/null 2>&1
 }
 
 systemctl_user() {
@@ -162,6 +174,19 @@ build_from_source() {
     SOURCE_UNIT_DIR="$root/packaging"
 }
 
+# A release archive (and the AppImage) ships this script next to the binary it
+# belongs to; installing that one needs no network.
+use_bundled_release() {
+    [[ -n "$SCRIPT_DIR" && -z "$VERSION" ]] || return 1
+    [[ -f "$SCRIPT_DIR/figma-font-agent" && -x "$SCRIPT_DIR/figma-font-agent" ]] || return 1
+    [[ -f "$SCRIPT_DIR/$SERVICE" ]] || return 1
+
+    info "installing the release in $SCRIPT_DIR"
+    SOURCE_BIN="$SCRIPT_DIR/figma-font-agent"
+    SOURCE_MAN="$SCRIPT_DIR/figma-font-agent.1"
+    SOURCE_UNIT_DIR="$SCRIPT_DIR"
+}
+
 install_release() {
     local target asset base
 
@@ -203,6 +228,8 @@ SOURCE_UNIT_DIR=""
 
 if [[ "$FROM_SOURCE" == "1" ]]; then
     build_from_source "$ROOT"
+elif use_bundled_release; then
+    :
 elif ! install_release; then
     if is_checkout "$ROOT"; then
         warn "no release asset available for $(detect_target); falling back to a source build"
@@ -235,14 +262,14 @@ mkdir -p "$UNIT_DIR"
 sed "s|^ExecStart=/usr/bin/figma-font-agent|ExecStart=$BIN_DIR/figma-font-agent|" \
     "$SOURCE_UNIT_DIR/$SERVICE" >"$UNIT_DIR/$SERVICE"
 
-systemctl_user daemon-reload
+systemctl_user daemon-reload || die "systemctl --user daemon-reload failed"
 systemctl_user disable --now "$SOCKET" || true
 rm -f "$UNIT_DIR/$SOCKET"
 
 if [[ "$MODE" == "socket" ]]; then
     cp "$SOURCE_UNIT_DIR/$SOCKET" "$UNIT_DIR/$SOCKET"
     systemctl_user disable --now "$SERVICE" || true
-    systemctl_user daemon-reload
+    systemctl_user daemon-reload || die "systemctl --user daemon-reload failed"
     systemctl_user enable --now "$SOCKET" || die "could not enable $SOCKET"
     info "the agent will start on the first request to 127.0.0.1:44950"
 else
