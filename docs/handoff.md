@@ -1,6 +1,6 @@
 # Handoff
 
-State of the project as of **2026-11-15**, at release **v0.2.1**. Written so
+State of the project as of **2026-11-15**, at release **v0.2.2**. Written so
 that someone (or some agent) can pick this up without re-deriving anything.
 
 - Repo: <https://github.com/hominluo/figma-font-installer-for-linux> (public, MIT)
@@ -151,8 +151,8 @@ Flatpak are `packaging/io.github.hominluo.FigmaFontAgent.{desktop,svg,metainfo.x
 ```bash
 # download path, no systemd involvement
 rm -rf /tmp/t && mkdir -p /tmp/t
-env -u XDG_RUNTIME_DIR HOME=/tmp/t ./install.sh --version v0.2.1
-/tmp/t/.local/bin/figma-font-agent --version      # 0.2.1
+env -u XDG_RUNTIME_DIR HOME=/tmp/t ./install.sh --version v0.2.2
+/tmp/t/.local/bin/figma-font-agent --version      # 0.2.2
 
 # live service on this machine
 systemctl --user is-active figma-font-agent       # active
@@ -294,7 +294,7 @@ which is why the PKGBUILD `cd`s there rather than to `$pkgname-$pkgver`.
 ## Where things run on this machine
 
 - Installed binary: `~/.local/bin/figma-font-agent`, installed by `install.sh`
-  from the v0.2.1 release (the static musl build).
+  from the v0.2.2 release (the static musl build).
 - Unit: `~/.config/systemd/user/figma-font-agent.service`, enabled and running.
 - Config: none. `~/.config/figma-font-agent/config.json` does not exist, so the
   defaults apply; `figma-font-agent --init-config` creates it.

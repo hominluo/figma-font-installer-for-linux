@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-11-15
+
+### Changed
+
+- The README explains how to connect Figma to the agent: the font picker stays
+  empty until Figma is connected once, and Figma's own dialog points to a
+  Downloads page that has nothing for Linux. It walks through
+  **I'm ready to connect** and the browser's local-network prompt, how to see
+  the connection in the log, and what to do when the list stays empty.
+- `install.sh` ends with the same connect steps.
+
+No change to the agent itself.
+
 ## [0.2.1] - 2026-11-15
 
 ### Fixed
@@ -86,6 +99,7 @@ First release.
   (`cargo-deb`, built in CI).
 - Man page, protocol reference and reverse-engineering notes.
 
+[0.2.2]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.2
 [0.2.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.1
