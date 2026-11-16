@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.hominluo.FigmaFontAgent</id>
+  <name>Figma Font Agent</name>
+  <summary>Use your installed fonts in Figma for the web</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.hominluo">
+    <name>Homin Luo</name>
+  </developer>
+  <description>
+    <p>
+      Figma can use the fonts installed on your computer, but the helper that makes them
+      available is only published for macOS and Windows. Figma Font Agent is an independent,
+      open-source implementation of that helper for Linux: while it runs, the browser version
+      of Figma can list, preview and use your local fonts.
+    </p>
+    <p>
+      The agent has no window. It listens on this computer only, answers requests from
+      figma.com only, and has no telemetry and no updater.
+    </p>
+    <p>
+      This project is not affiliated with or endorsed by Figma, Inc.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.hominluo.FigmaFontAgent.desktop</launchable>
+  <url type="homepage">https://github.com/hominluo/figma-font-installer-for-linux</url>
+  <url type="bugtracker">https://github.com/hominluo/figma-font-installer-for-linux/issues</url>
+  <url type="vcs-browser">https://github.com/hominluo/figma-font-installer-for-linux</url>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.2.0" date="2026-11-15"/>
+  </releases>
+</component>

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Figma Font Agent
+GenericName=Local fonts for Figma
+Comment=Serve the fonts installed on this computer to Figma in the browser
+Exec=figma-font-agent
+Icon=io.github.hominluo.FigmaFontAgent
+Terminal=false
+StartupNotify=false
+Categories=Utility;
+Keywords=figma;fonts;typography;

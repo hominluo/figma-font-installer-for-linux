@@ -3,22 +3,29 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Builds and smoke-tests every package without publishing anything, to check
+  # the pipeline before a tag is pushed: `gh workflow run release.yml`.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  binaries:
-    name: static binary (${{ matrix.target }})
+  packages:
+    name: packages (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - arch: x86_64
+            target: x86_64-unknown-linux-musl
             runner: ubuntu-latest
-          - target: aarch64-unknown-linux-musl
+          - arch: aarch64
+            target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
+    env:
+      BINARY: target/${{ matrix.target }}/release/figma-font-agent
     steps:
       - uses: actions/checkout@v4
 
@@ -26,86 +33,140 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl toolchain
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools rpm flatpak librsvg2-common
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
-      - name: Build
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check that the tag matches Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v${{ steps.version.outputs.version }}" = "${{ github.ref_name }}"
+
+      # One static binary goes into every package below, so they all ship the
+      # same bytes and none of them depends on the host's libc.
+      - name: Build the static binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Assemble archive
+      - name: Archive
         run: |
           set -euo pipefail
-          staging="dist/figma-font-agent"
-          mkdir -p "$staging"
-          cp "target/${{ matrix.target }}/release/figma-font-agent" "$staging/"
-          cp docs/figma-font-agent.1 "$staging/"
-          cp packaging/figma-font-agent.service "$staging/"
-          cp packaging/figma-font-agent.socket "$staging/"
-          cp README.md LICENSE "$staging/"
-          tar -C dist -czf "dist/figma-font-agent-${{ matrix.target }}.tar.gz" figma-font-agent
-          file "dist/figma-font-agent-${{ matrix.target }}.tar.gz"
+          staging=stage/figma-font-agent
+          mkdir -p "$staging" dist
+          cp "$BINARY" install.sh docs/figma-font-agent.1 \
+            packaging/figma-font-agent.service packaging/figma-font-agent.socket \
+            README.md LICENSE "$staging/"
+          tar -C stage -czf "dist/figma-font-agent-${{ matrix.target }}.tar.gz" figma-font-agent
+
+      - name: Debian package
+        run: cargo deb --no-build --target ${{ matrix.target }} --output dist/
+
+      - name: RPM package
+        run: cargo generate-rpm --target ${{ matrix.target }} -o dist/
+
+      - name: AppImage
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
+            "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${{ matrix.arch }}.AppImage"
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          APPIMAGE_EXTRACT_AND_RUN=1 APPIMAGETOOL="$RUNNER_TEMP/appimagetool" \
+            packaging/appimage/build.sh "$BINARY" "${{ steps.version.outputs.version }}" "${{ matrix.arch }}" dist
+
+      - name: Flatpak bundle
+        run: |
+          set -euo pipefail
+          # Flatpak checks the icon in a sandbox, which Ubuntu's AppArmor
+          # profile for unprivileged user namespaces blocks on the runner.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          packaging/flatpak/build.sh "$BINARY" "${{ steps.version.outputs.version }}" "${{ matrix.arch }}" dist
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          ls -lh dist
+          deb=$(ls dist/*.deb)
+          rpm=$(ls dist/*.rpm)
+          appimage=$(ls dist/*.AppImage)
+
+          dpkg-deb -f "$deb" Package Version Architecture Depends Recommends
+          dpkg-deb -c "$deb"
+          rpm -qip "$rpm"
+          rpm -qlp "$rpm"
+
+          sudo dpkg -i "$deb"
+          figma-font-agent --version
+          sudo dpkg -r figma-font-agent
+
+          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --version
+
+          # The archive installs itself, without a download and without systemd.
+          env -u XDG_RUNTIME_DIR HOME="$RUNNER_TEMP/home" stage/figma-font-agent/install.sh
+          "$RUNNER_TEMP/home/.local/bin/figma-font-agent" --version
 
       - uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.target }}
-          path: dist/*.tar.gz
+          name: packages-${{ matrix.arch }}
+          path: dist/*
           if-no-files-found: error
 
-  deb:
-    name: Debian package (${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-musl
-            runner: ubuntu-latest
-          - target: aarch64-unknown-linux-musl
-            runner: ubuntu-24.04-arm
+  arch:
+    name: Arch package
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
     steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed git rust fontconfig
+
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install musl toolchain
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: deb-${{ matrix.target }}
-
-      - name: Install cargo-deb
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deb
-
-      # A static binary keeps the package free of a libc6 version floor.
-      - name: Build
+      # The PKGBUILD is the one users build themselves. makepkg takes a local
+      # file named like its source entry instead of downloading the tag
+      # archive, which cannot carry its own checksum.
+      - name: Build with makepkg
         run: |
-          cargo build --release --locked --target ${{ matrix.target }}
-          cargo deb --no-build --target ${{ matrix.target }} --output dist/
+          set -euo pipefail
+          version=$(sed -n 's/^pkgver=//p' packaging/PKGBUILD)
+          git config --global --add safe.directory "$PWD"
+          git archive --format=tar.gz \
+            --prefix="figma-font-installer-for-linux-$version/" \
+            -o "packaging/figma-font-agent-$version.tar.gz" HEAD
 
-      - name: Show package metadata
-        run: |
-          deb=$(ls dist/*.deb)
-          dpkg-deb -f "$deb" Package Version Architecture Depends
-          dpkg-deb -c "$deb"
+          useradd -m builder
+          chown -R builder: .
+          cd packaging
+          sudo -u builder makepkg --skipchecksums --noconfirm
+
+          pacman -U --noconfirm figma-font-agent-*.pkg.tar.zst
+          figma-font-agent --version
+          pacman -Ql figma-font-agent
+
+          mkdir -p ../dist
+          cp figma-font-agent-*.pkg.tar.zst ../dist/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: deb-${{ matrix.target }}
-          path: dist/*.deb
+          name: packages-arch
+          path: dist/*
           if-no-files-found: error
 
   release:
     name: Publish release
-    needs: [binaries, deb]
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [packages, arch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -117,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum *.tar.gz *.deb | tee SHA256SUMS
+          sha256sum * | tee SHA256SUMS
           ls -lh
 
       - uses: softprops/action-gh-release@v2

@@ -1,6 +1,6 @@
 [package]
 name = "figma-font-agent"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Serve Linux system fonts to Figma in the browser"
@@ -36,6 +36,7 @@ license-file = ["LICENSE"]
 section = "utils"
 priority = "optional"
 depends = "$auto"
+recommends = "fontconfig"
 extended-description = """An open reimplementation of the local font protocol used by the Figma \
 Agent, which Figma ships only for macOS and Windows. This service lets the \
 browser build of Figma list and render the fonts installed on a Linux machine. Fonts are discovered through fontconfig, font \
@@ -48,3 +49,18 @@ assets = [
     ["README.md", "usr/share/doc/figma-font-agent/README.md", "644"],
     ["LICENSE", "usr/share/doc/figma-font-agent/copyright", "644"],
 ]
+
+[package.metadata.generate-rpm]
+# The binary is static; there is nothing for an automatic dependency scan to find.
+auto-req = "no"
+assets = [
+    { source = "target/release/figma-font-agent", dest = "/usr/bin/figma-font-agent", mode = "755" },
+    { source = "packaging/figma-font-agent.service", dest = "/usr/lib/systemd/user/figma-font-agent.service", mode = "644" },
+    { source = "packaging/figma-font-agent.socket", dest = "/usr/lib/systemd/user/figma-font-agent.socket", mode = "644" },
+    { source = "docs/figma-font-agent.1", dest = "/usr/share/man/man1/figma-font-agent.1", mode = "644", doc = true },
+    { source = "README.md", dest = "/usr/share/doc/figma-font-agent/README.md", mode = "644", doc = true },
+    { source = "LICENSE", dest = "/usr/share/licenses/figma-font-agent/LICENSE", mode = "644" },
+]
+
+[package.metadata.generate-rpm.recommends]
+fontconfig = "*"

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Entry point of the AppImage.
+#
+#   figma-font-agent.AppImage              run the agent until it is stopped
+#   figma-font-agent.AppImage --install    install it as a systemd user service
+#   figma-font-agent.AppImage --uninstall  remove that installation again
+#
+# Any other arguments go to the agent itself (try --help).
+payload="$(dirname "$(readlink -f "$0")")/usr/lib/figma-font-agent"
+
+case "${1:-}" in
+    --install)
+        shift
+        exec bash "$payload/install.sh" "$@"
+        ;;
+    --uninstall)
+        exec bash "$payload/install.sh" "$@"
+        ;;
+esac
+
+exec "$payload/figma-font-agent" "$@"

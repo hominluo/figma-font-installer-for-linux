@@ -1,6 +1,6 @@
 # Maintainer: Homin Luo <homin.ro@gmail.com>
 pkgname=figma-font-agent
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Serve system fonts to Figma in the browser (open Figma Agent reimplementation)'
 arch=('x86_64' 'aarch64')
@@ -8,7 +8,7 @@ url='https://github.com/hominluo/figma-font-installer-for-linux'
 license=('MIT')
 depends=('gcc-libs' 'fontconfig')
 makedepends=('cargo' 'rust')
-options=('!lto') # the release profile already enables LTO
+options=('!lto' '!debug') # the release profile already enables LTO and strips
 _archive="$url/archive/v$pkgver.tar.gz"
 source=("$pkgname-$pkgver.tar.gz::$_archive")
 sha256sums=('02589bfc20499fe422bca61b62d336366d86fb083a99a36c01ef4a5a93bb57ee')
