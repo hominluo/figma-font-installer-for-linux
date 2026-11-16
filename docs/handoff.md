@@ -1,6 +1,6 @@
 # Handoff
 
-State of the project as of **2026-11-15**, at release **v0.2.0**. Written so
+State of the project as of **2026-11-15**, at release **v0.2.1**. Written so
 that someone (or some agent) can pick this up without re-deriving anything.
 
 - Repo: <https://github.com/hominluo/figma-font-installer-for-linux> (public, MIT)
@@ -45,6 +45,9 @@ Runtime behaviour worth knowing:
 - The index is rebuilt before every `/figma/font-files` answer (at most once
   per two seconds, one scan at a time) and on the background timer. Rescans are
   incremental (mtime + size); one that changes nothing logs at `debug`.
+- The ports are bound before the first scan, which takes seconds on a cold
+  cache (6 s was seen here under memory pressure). A request that arrives
+  meanwhile waits in the listen queue instead of being refused.
 - Variable fonts are exposed as their `fvar` named instances, one entry each.
 - Only files present in the index are served; `file` is a key, not a path.
 - A request with a foreign `Origin` gets `403` before any handler runs. `Host`
@@ -143,13 +146,13 @@ Flatpak are `packaging/io.github.hominluo.FigmaFontAgent.{desktop,svg,metainfo.x
 | no telemetry, no updater | deliberate difference from the official agent, documented in the README |
 | Flatpak as a bundle, not on Flathub | Flathub wants a build from source and a review; the bundle needs neither |
 
-## Verify a release (what was actually run for v0.2.0)
+## Verify a release (what was actually run for v0.2.0 and v0.2.1)
 
 ```bash
 # download path, no systemd involvement
 rm -rf /tmp/t && mkdir -p /tmp/t
-env -u XDG_RUNTIME_DIR HOME=/tmp/t ./install.sh --version v0.2.0
-/tmp/t/.local/bin/figma-font-agent --version      # 0.2.0
+env -u XDG_RUNTIME_DIR HOME=/tmp/t ./install.sh --version v0.2.1
+/tmp/t/.local/bin/figma-font-agent --version      # 0.2.1
 
 # live service on this machine
 systemctl --user is-active figma-font-agent       # active
@@ -193,6 +196,8 @@ Also verified for this release:
   or the file is followed too; 30 concurrent requests share one scan.
 - **Socket activation** with `systemd-socket-activate` and a fake `fc-list`
   that records what it inherits: no `LISTEN_*` variables, no sockets.
+- **Startup.** A request sent 0.2 s after the process starts is answered once
+  the scan finishes; 0.2.0 refused it.
 - `cargo fmt --check`, `cargo clippy --release --all-targets -- -D warnings` and
   `cargo test --release` are clean.
 
@@ -289,7 +294,7 @@ which is why the PKGBUILD `cd`s there rather than to `$pkgname-$pkgver`.
 ## Where things run on this machine
 
 - Installed binary: `~/.local/bin/figma-font-agent`, installed by `install.sh`
-  from the v0.2.0 release (the static musl build).
+  from the v0.2.1 release (the static musl build).
 - Unit: `~/.config/systemd/user/figma-font-agent.service`, enabled and running.
 - Config: none. `~/.config/figma-font-agent/config.json` does not exist, so the
   defaults apply; `figma-font-agent --init-config` creates it.

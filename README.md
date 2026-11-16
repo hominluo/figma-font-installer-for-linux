@@ -44,14 +44,16 @@ system; all of them exist for x86_64 and aarch64 except the Arch package
 | Format | For | File |
 | --- | --- | --- |
 | [Install script](#any-distribution-install-script) | any distribution | none, it downloads the archive |
-| [`.deb`](#debian--ubuntu) | Debian, Ubuntu, Mint, Pop!_OS | `figma-font-agent_0.2.0-1_amd64.deb` |
-| [`.rpm`](#fedora--rhel--opensuse) | Fedora, RHEL, openSUSE | `figma-font-agent-0.2.0-1.x86_64.rpm` |
-| [Arch package](#arch-linux--omarchy) | Arch, Omarchy, Manjaro | `figma-font-agent-0.2.0-1-x86_64.pkg.tar.zst` |
-| [AppImage](#appimage) | trying it without installing | `figma-font-agent-0.2.0-x86_64.AppImage` |
-| [Flatpak](#flatpak) | a sandboxed install | `figma-font-agent-0.2.0-x86_64.flatpak` |
+| [`.deb`](#debian--ubuntu) | Debian, Ubuntu, Mint, Pop!_OS | `figma-font-agent_<version>-1_amd64.deb` |
+| [`.rpm`](#fedora--rhel--opensuse) | Fedora, RHEL, openSUSE | `figma-font-agent-<version>-1.x86_64.rpm` |
+| [Arch package](#arch-linux--omarchy) | Arch, Omarchy, Manjaro | `figma-font-agent-<version>-1-x86_64.pkg.tar.zst` |
+| [AppImage](#appimage) | trying it without installing | `figma-font-agent-<version>-x86_64.AppImage` |
+| [Flatpak](#flatpak) | a sandboxed install | `figma-font-agent-<version>-x86_64.flatpak` |
 | [Archive](#archive) | installing by hand, offline | `figma-font-agent-x86_64-unknown-linux-musl.tar.gz` |
 
-`SHA256SUMS` in the release covers every file.
+`SHA256SUMS` in the release covers every file. The commands below are meant to
+be run in the directory you downloaded the file to; the `*` stands for the
+version.
 
 ### Any distribution (install script)
 
@@ -79,7 +81,7 @@ curl -fsSL …/install.sh | bash -s -- --socket
 ### Debian / Ubuntu
 
 ```bash
-sudo apt install ./figma-font-agent_0.2.0-1_amd64.deb   # or _arm64.deb
+sudo apt install ./figma-font-agent_*_amd64.deb   # or _arm64.deb
 systemctl --user enable --now figma-font-agent.service
 ```
 
@@ -89,7 +91,7 @@ dependencies and installs on any Debian or Ubuntu release.
 ### Fedora / RHEL / openSUSE
 
 ```bash
-sudo dnf install ./figma-font-agent-0.2.0-1.x86_64.rpm   # or .aarch64.rpm
+sudo dnf install ./figma-font-agent-*.x86_64.rpm   # or .aarch64.rpm
 systemctl --user enable --now figma-font-agent.service
 ```
 
@@ -100,7 +102,7 @@ The package is not signed. `dnf` installs a local file regardless; with
 ### Arch Linux / Omarchy
 
 ```bash
-sudo pacman -U ./figma-font-agent-0.2.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./figma-font-agent-*-x86_64.pkg.tar.zst
 systemctl --user enable --now figma-font-agent.service
 ```
 
@@ -118,8 +120,8 @@ The package installs the binary to `/usr/bin`, the user units to
 ### AppImage
 
 ```bash
-chmod +x figma-font-agent-0.2.0-x86_64.AppImage
-./figma-font-agent-0.2.0-x86_64.AppImage              # runs until you stop it
+chmod +x figma-font-agent-*-x86_64.AppImage
+./figma-font-agent-*-x86_64.AppImage              # runs until you stop it
 ```
 
 The agent has no window: it serves fonts for as long as it runs. To keep it,
@@ -127,8 +129,8 @@ let the AppImage install itself as a user service, after which the file is no
 longer needed:
 
 ```bash
-./figma-font-agent-0.2.0-x86_64.AppImage --install    # same as the install script
-./figma-font-agent-0.2.0-x86_64.AppImage --uninstall
+./figma-font-agent-*-x86_64.AppImage --install    # same as the install script
+./figma-font-agent-*-x86_64.AppImage --uninstall
 ```
 
 If your system has no FUSE, add `--appimage-extract-and-run`.
@@ -136,7 +138,7 @@ If your system has no FUSE, add `--appimage-extract-and-run`.
 ### Flatpak
 
 ```bash
-flatpak install --user ./figma-font-agent-0.2.0-x86_64.flatpak
+flatpak install --user ./figma-font-agent-*-x86_64.flatpak
 flatpak run io.github.hominluo.FigmaFontAgent
 ```
 
@@ -461,7 +463,7 @@ Releases are built by GitHub Actions when a `v*` tag is pushed:
 # file and CHANGELOG.md, then check the pipeline without publishing
 gh workflow run release.yml
 
-git tag v0.2.0 && git push origin v0.2.0
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
 The workflow builds one static binary per architecture and packages it as:

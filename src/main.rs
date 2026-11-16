@@ -151,19 +151,22 @@ async fn run() -> Result<()> {
         info!("config: {}", path.display());
     }
 
-    // Claim systemd's sockets before the scan starts `fc-list`, so no child
-    // process ever sees the activation environment or the listening socket.
-    let activated = socket_activated();
-
-    let scan_settings = settings.clone();
-    let index = tokio::task::spawn_blocking(move || fonts::scan(&scan_settings, None)).await??;
-
     if args.print_index {
+        let scan_settings = settings.clone();
+        let index =
+            tokio::task::spawn_blocking(move || fonts::scan(&scan_settings, None)).await??;
         let payload = proto::font_files_response(&index, &settings);
         println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(());
     }
 
+    // Claim systemd's sockets before the scan starts `fc-list`, so no child
+    // process ever sees the activation environment or the listening socket.
+    let activated = socket_activated();
+
+    // Listen before scanning. Reading every font takes seconds on a cold
+    // cache; a browser that asks in the meantime should wait for its answer,
+    // not be refused and conclude that there is no agent.
     let listeners = if activated.is_empty() {
         server::bind(&settings.ports).await
     } else {
@@ -180,6 +183,9 @@ async fn run() -> Result<()> {
             settings.ports
         );
     }
+
+    let scan_settings = settings.clone();
+    let index = tokio::task::spawn_blocking(move || fonts::scan(&scan_settings, None)).await??;
 
     let state = AppState::new(index, settings, &listeners);
 

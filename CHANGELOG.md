@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-11-15
+
+### Fixed
+
+- The agent listens before its first font scan instead of after it. While the
+  scan ran, which takes several seconds on a cold cache, connections were
+  refused and Figma could conclude that no agent was installed. A request that
+  arrives during the scan now waits for its answer.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added
@@ -77,6 +86,7 @@ First release.
   (`cargo-deb`, built in CI).
 - Man page, protocol reference and reverse-engineering notes.
 
+[0.2.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.1
 [0.2.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.2.0
 [0.1.1]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.1
 [0.1.0]: https://github.com/hominluo/figma-font-installer-for-linux/releases/tag/v0.1.0
